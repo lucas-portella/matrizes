@@ -23,8 +23,9 @@ int main (int argc, char* argv[]) {
 	colunas = atoi(argv[2]);
 	f = (argc == 4) ? fopen(argv[3], "w") : stdout;
 
+	fprintf(f, "%d\t%d\n", linhas, colunas);
 	for (int i =0; i < 2 * linhas * colunas; i++)
-		fprintf(f, "%d\t", NRAND);
+		fprintf(f, "%d\n", NRAND);
 
 	fclose(f);
 
