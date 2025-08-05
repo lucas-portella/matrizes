@@ -28,27 +28,85 @@ dados_linha* cria_dados_linha (matriz* m1, matriz* m2, matriz* soma, int linha);
 dados_linha* destroi_dados_linha (dados_linha* dados);
 void* soma_linha (void* arg);
 
-int main () {
-	int m1[9] = {1, 2, 3, 4, 5, 6, 7, 8, 9};
-	int m2[9] = {0, 0, 0, 0, 0, 0, 0, 0, 0};
+int main (int argc, char* argv[]) {
+	FILE* f;
+	char buffer[10];
+	char c;
+	int *v1, *v2;
+	int linhas, colunas, i, total, v1_preenchido, j;
+	
+	f = (argc == 2) ? fopen (argv[1], "r") : stdin;
 
-	matriz* matriz1 = cria_matriz (3, 3, m1);
-	matriz* matriz2 = cria_matriz (3, 3, m2);
+	/* leitura do tamanho das matrizes */
+	i = 0;
+	c = fgetc(f);
+	while (c != '\n') {
+		if (c == '\t') {
+			buffer[i] = '\0';
+			linhas = atoi(buffer);
+			i = 0;
+		}
+		else {
+			buffer[i++] = c;
+		}
+		c = fgetc(f);
+	}
+	buffer[i] = '\0';
+	colunas = atoi(buffer);
+	
+	/* leitura dos valores nos vetores */
+	total = linhas * colunas;
+	v1 = (int*) malloc (total * sizeof (int));
+	v2 = (int*) malloc (total * sizeof (int));
+
+	i = 0;
+	j = 0;
+	c = fgetc(f);
+	while (c != EOF) {
+		if (c == '\n') {
+			int num;
+			buffer[i] = '\0';
+			num = atoi(buffer);
+			i = 0;
+			if (v1_preenchido) {
+				v2[j++] = num;
+			}
+			else {
+				if (j == total) {
+					v1_preenchido = 1;
+					v2[0] = num;
+					j = 1;
+				}
+				else {
+					v1[j++] = num;
+				}	
+			}
+		}
+		else {
+			buffer[i++] = c;
+		}
+		c = fgetc(f);
+	}
+
+	fclose(f);
+
+	matriz* matriz1 = cria_matriz (linhas, colunas, v1);
+	matriz* matriz2 = cria_matriz (linhas, colunas, v2);
 
 	
 	#ifdef PARALELO
-	matriz* soma = cria_matriz (3, 3, NULL);
-	dados_linha* dados[3];
-	pthread_t threads[3];
-	for (int i = 0; i < 3; i++) {
+	matriz* soma = cria_matriz (linhas, colunas, NULL);
+	dados_linha* dados[linhas];
+	pthread_t threads[linhas];
+	for (i = 0; i < linhas; i++) {
 		dados[i] = cria_dados_linha (matriz1, matriz2, soma, i);
 		pthread_create(&threads[i], NULL, soma_linha, dados[i]);
 	}
 
-	for (int i = 0; i < 3; i++)
+	for (i = 0; i < linhas; i++)
 		pthread_join(threads[i], NULL);
 
-	for (int i = 0; i < 3; i++)
+	for (i = 0; i < linhas; i++)
 		dados[i] = destroi_dados_linha (dados[i]);
 
 	#else
