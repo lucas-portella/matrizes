@@ -17,4 +17,4 @@ lmat: lmat.c
 	$(CC) $(FLAGS) lmat.c -o lmat
 
 purge: 
-	rm -f sequencial* paralelo* mrand lmat
+	rm -f sequencial* paralelo* mrand lmat *.out
