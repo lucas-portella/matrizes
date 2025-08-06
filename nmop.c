@@ -34,6 +34,7 @@ int main (int argc, char* argv[]) {
 	char c;
 	int *v1, *v2;
 	int linhas, colunas, i, total, v1_preenchido, j;
+	clock_t inicio, fim;
 	
 	f = (argc == 2) ? fopen (argv[1], "r") : stdin;
 
@@ -98,6 +99,7 @@ int main (int argc, char* argv[]) {
 	matriz* soma = cria_matriz (linhas, colunas, NULL);
 	dados_linha* dados[linhas];
 	pthread_t threads[linhas];
+	inicio = clock ();
 	for (i = 0; i < linhas; i++) {
 		dados[i] = cria_dados_linha (matriz1, matriz2, soma, i);
 		pthread_create(&threads[i], NULL, soma_linha, dados[i]);
@@ -105,14 +107,18 @@ int main (int argc, char* argv[]) {
 
 	for (i = 0; i < linhas; i++)
 		pthread_join(threads[i], NULL);
+	fim = clock ();
 
 	for (i = 0; i < linhas; i++)
 		dados[i] = destroi_dados_linha (dados[i]);
 
 	#else
+	inicio = clock ();
 	matriz* soma = soma_matrizes_sequencial (matriz1, matriz2);
+	fim = clock ();
 	#endif
 
+	fprintf(stderr, "Tempo de execucao: %f\n", (float) (fim - inicio) / CLOCKS_PER_SEC);
 	imprime_matriz (soma);
 
 	matriz1 = destroi_matriz (matriz1);
