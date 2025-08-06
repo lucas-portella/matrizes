@@ -5,6 +5,8 @@
 
 #define IDX(m,i,j) (i*m->colunas + j)
 
+#define NUM_THREADS 4
+
 typedef struct {
 	int linhas;
 	int colunas;
@@ -15,8 +17,9 @@ typedef struct {
 	matriz* m1;
 	matriz* m2;
 	matriz* soma;
-	int linha;
-} dados_linha;
+	int linha_inicio;
+	int linha_fim;
+} dados_bloco;
 
 matriz* cria_matriz (int linhas, int colunas, int* m);
 matriz* destroi_matriz (matriz* m);
@@ -24,9 +27,9 @@ void imprime_matriz (matriz* m);
 int habilita_soma (matriz* m1, matriz* m2);
 matriz* soma_matrizes_sequencial (matriz* m1, matriz*m2);
 
-dados_linha* cria_dados_linha (matriz* m1, matriz* m2, matriz* soma, int linha);
-dados_linha* destroi_dados_linha (dados_linha* dados);
-void* soma_linha (void* arg);
+dados_bloco* cria_dados_bloco (matriz* m1, matriz* m2, matriz* soma, int linha_inicio, int linha_fim);
+dados_bloco* destroi_dados_bloco (dados_bloco* dados);
+void* soma_bloco (void* arg);
 
 int main (int argc, char* argv[]) {
 	FILE* f;
@@ -38,6 +41,11 @@ int main (int argc, char* argv[]) {
 	
 	f = (argc == 2) ? fopen (argv[1], "r") : stdin;
 
+	if (!f) {
+		fprintf(stderr, "Erro ao abrir arquivo %s.\n", argv[1]);
+		return 1;
+	}	
+	
 	/* leitura do tamanho das matrizes */
 	i = 0;
 	c = fgetc(f);
@@ -59,6 +67,11 @@ int main (int argc, char* argv[]) {
 	total = linhas * colunas;
 	v1 = (int*) malloc (total * sizeof (int));
 	v2 = (int*) malloc (total * sizeof (int));
+	
+	if (!v1 || !v2) {
+		fprintf(stderr, "Erro alocacao de memoria.\n");
+		return 2;
+	}
 
 	i = 0;
 	j = 0;
@@ -94,23 +107,25 @@ int main (int argc, char* argv[]) {
 	matriz* matriz1 = cria_matriz (linhas, colunas, v1);
 	matriz* matriz2 = cria_matriz (linhas, colunas, v2);
 
-	
 	#ifdef PARALELO
 	matriz* soma = cria_matriz (linhas, colunas, NULL);
-	dados_linha* dados[linhas];
-	pthread_t threads[linhas];
-	inicio = clock ();
-	for (i = 0; i < linhas; i++) {
-		dados[i] = cria_dados_linha (matriz1, matriz2, soma, i);
-		pthread_create(&threads[i], NULL, soma_linha, dados[i]);
+	dados_bloco* dados[NUM_THREADS];
+	pthread_t threads[NUM_THREADS];
+	for (i = 0; i < NUM_THREADS - 1; i++) {
+		dados[i] = cria_dados_bloco (matriz1, matriz2, soma, i*(linhas/NUM_THREADS), (i+1)*(linhas/NUM_THREADS) - 1);
 	}
+	dados[i] = cria_dados_bloco (matriz1, matriz2, soma, i*(linhas/NUM_THREADS), linhas - 1);
 
-	for (i = 0; i < linhas; i++)
+	inicio = clock ();
+	for (i = 0; i < NUM_THREADS; i++) {
+		pthread_create(&threads[i], NULL, soma_bloco, (void*) dados[i]);
+	}
+	for (i = 0; i < NUM_THREADS; i++)
 		pthread_join(threads[i], NULL);
 	fim = clock ();
 
-	for (i = 0; i < linhas; i++)
-		dados[i] = destroi_dados_linha (dados[i]);
+	for (i = 0; i < NUM_THREADS; i++)
+		dados[i] = destroi_dados_bloco (dados[i]);
 
 	#else
 	inicio = clock ();
@@ -124,6 +139,10 @@ int main (int argc, char* argv[]) {
 	matriz1 = destroi_matriz (matriz1);
 	matriz2 = destroi_matriz (matriz2);
 	soma = destroi_matriz (soma);
+	free(v1);
+	free(v2);
+	v1 = NULL;
+	v2 = NULL;
 
 	return 0;
 }
@@ -214,8 +233,8 @@ matriz* soma_matrizes_sequencial (matriz* m1, matriz*m2) {
 	return soma;
 }
 
-dados_linha* cria_dados_linha (matriz* m1, matriz* m2, matriz* soma, int linha) {
-	dados_linha* dados = (dados_linha*) malloc (sizeof(dados_linha));
+dados_bloco* cria_dados_bloco (matriz* m1, matriz* m2, matriz* soma, int linha_inicio, int linha_fim) {
+	dados_bloco* dados = (dados_bloco*) malloc (sizeof(dados_bloco));
 
 	if (!dados)
 		return NULL;
@@ -223,12 +242,13 @@ dados_linha* cria_dados_linha (matriz* m1, matriz* m2, matriz* soma, int linha) 
 	dados->m1 = m1;
 	dados->m2 = m2;
 	dados->soma = soma;
-	dados->linha = linha;
+	dados->linha_inicio = linha_inicio;
+	dados->linha_fim = linha_fim;
 
 	return dados;
 }
 
-dados_linha* destroi_dados_linha (dados_linha* dados) {
+dados_bloco* destroi_dados_bloco (dados_bloco* dados) {
 	if (dados) {
 		dados->m1 = NULL;
 		dados->m2 = NULL;
@@ -239,12 +259,16 @@ dados_linha* destroi_dados_linha (dados_linha* dados) {
 	return NULL;
 }
 
-void* soma_linha (void* arg) {
-	dados_linha* dados = (dados_linha*) arg;
-	int linha = dados->linha;
+void* soma_bloco (void* arg) {
+	dados_bloco* dados = (dados_bloco*) arg;
+	int linha_inicio = dados->linha_inicio;
+	int linha_fim = dados->linha_fim;
 
-	for (int i = 0; i < dados->m1->colunas; i++) 
-		dados->soma->m[IDX(dados->soma, linha, i)] = dados->m1->m[IDX(dados->m1, linha, i)] + dados->m2->m[IDX(dados->m2, linha, i)];
+	for (int i = linha_inicio; i <= linha_fim; i++) {
+		for (int j = 0; j < dados->m1->colunas; j++) {
+			dados->soma->m[IDX(dados->soma, i, j)] = dados->m1->m[IDX(dados->m1, i, j)] + dados->m2->m[IDX(dados->m2, i, j)];
+		}
+	}
 
 	pthread_exit(NULL);
 }
