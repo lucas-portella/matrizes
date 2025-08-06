@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <pthread.h>
+#include <time.h>
 
 #define IDX(m,i,j) (i*m->colunas + j)
 
@@ -37,7 +38,8 @@ int main (int argc, char* argv[]) {
 	char c;
 	int *v1, *v2;
 	int linhas, colunas, i, total, v1_preenchido, j;
-	clock_t inicio, fim;
+//	clock_t inicio, fim;
+	struct timespec inicio, fim;
 	
 	f = (argc == 2) ? fopen (argv[1], "r") : stdin;
 
@@ -116,24 +118,24 @@ int main (int argc, char* argv[]) {
 	}
 	dados[i] = cria_dados_bloco (matriz1, matriz2, soma, i*(linhas/NUM_THREADS), linhas - 1);
 
-	inicio = clock ();
+	clock_gettime(CLOCK_MONOTONIC, &inicio);
 	for (i = 0; i < NUM_THREADS; i++) {
 		pthread_create(&threads[i], NULL, soma_bloco, (void*) dados[i]);
 	}
 	for (i = 0; i < NUM_THREADS; i++)
 		pthread_join(threads[i], NULL);
-	fim = clock ();
-
+	clock_gettime(CLOCK_MONOTONIC, &fim);
+	
 	for (i = 0; i < NUM_THREADS; i++)
 		dados[i] = destroi_dados_bloco (dados[i]);
 
 	#else
-	inicio = clock ();
+	clock_gettime(CLOCK_MONOTONIC, &inicio);
 	matriz* soma = soma_matrizes_sequencial (matriz1, matriz2);
-	fim = clock ();
+	clock_gettime(CLOCK_MONOTONIC, &fim);
 	#endif
 
-	fprintf(stderr, "Tempo de execucao: %f\n", (float) (fim - inicio) / CLOCKS_PER_SEC);
+	fprintf(stderr, "Tempo de execucao: %.6lf\n", (double) (fim.tv_sec - inicio.tv_sec + (fim.tv_nsec - inicio.tv_nsec)/1e9));
 	imprime_matriz (soma);
 
 	matriz1 = destroi_matriz (matriz1);
